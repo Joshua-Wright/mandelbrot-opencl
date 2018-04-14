@@ -3,36 +3,19 @@
 #include <GL/glew.h>
 #include <GL/glut.h>
 #include <GL/gl.h>
+#include <CL/cl2.hpp>
 
 #include "util.h"
+#include "shaders.h"
 
 using std::cout;
 using std::endl;
-
-std::string fragment_shader = R"'''(
-#version 330
-uniform sampler2D tex;
-in vec2 texcoord;
-out vec4 fragColor;
-void main() {
-    //fragColor = texture2D(tex,texcoord);
-    fragColor = vec4(texcoord.x*2,texcoord.y,0.5,1);
-}
-)'''";
-
-std::string vertex_shader = R"'''(
-#version 330
-layout(location = 0) in vec3 pos;
-layout(location = 1) in vec2 tex;
-uniform mat4 matrix;
-out vec2 texcoord;
-void main() {
-    texcoord = tex;
-    gl_Position = matrix * vec4(pos,1.0);
-}
-)'''";
+using cl::Context;
 
 void display();
+
+void keyboard(unsigned char key, int x, int y);
+
 
 GLuint vao;
 GLuint vbo;
@@ -44,13 +27,14 @@ GLuint program;
 int width = 1024;
 int height = 1024;
 
+Context context;
+
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, -1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f,
 };
-
 
 const float vertices[12] = {
         -1.0f, -1.0f, 0.0,
@@ -77,6 +61,7 @@ void keyboard(unsigned char key, int x, int y) {
             break;
     }
 }
+
 
 int main(int argc, char **argv) {
     glutInit(&argc, argv);
