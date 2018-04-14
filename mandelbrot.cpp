@@ -29,6 +29,8 @@ int width = 1024;
 int height = 1024;
 
 cl::Context context;
+cl::CommandQueue queue;
+cl::Kernel mandelbrot_kernel;
 
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -104,6 +106,10 @@ int main(int argc, char **argv) {
     context = makeOpenCLContext(platform, device, window);
     cl_int opencl_error;
     auto opencl_program = makeOpenClProgram(context, mandelbrot_cl, opencl_error);
+    queue = cl::CommandQueue(context, device);
+    opencl_program.build({device});
+    mandelbrot_kernel = cl::Kernel(opencl_program, "fractal");
+
 
     shader_program = makeShaderProgram(vertex_shader, fragment_shader);
     texture = makeTexture(width, height);
