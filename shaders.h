@@ -342,7 +342,7 @@ float4 mandelbrot(double2 coords)
 
 kernel
 void fractal(write_only image2d_t out, int dim0, int dim1,
-             float scalex, float scaley, float translatex, float translatey)
+             double scalex, double scaley, double translatex, double translatey)
 {
     const int gx = get_global_id(0);
     const int gy = get_global_id(1);

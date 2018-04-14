@@ -18,14 +18,16 @@ using std::endl;
 
 void drawTriangles();
 
-void processTimeStep();
+bool processTimeStep();
 
 GLuint vao;
 GLuint vbo;
 GLuint tbo;
 GLuint ibo;
 GLuint texture;
+int matrix_loc;
 GLuint shader_program;
+GLFWwindow *window;
 
 int width = 1024;
 int height = 1024;
@@ -34,16 +36,6 @@ cl::Context context;
 cl::CommandQueue queue;
 cl::Kernel mandelbrot_kernel;
 cl::ImageGL opencl_texture;
-
-int lastRow = 0;
-bool doRender = true;
-const size_t chunkSize = 16;
-float scale = 2.0f;
-float translate_x = 0.0f;
-float translate_y = 0.0f;
-
-bool screen_is_dirty = false;
-
 
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -68,18 +60,56 @@ const float texcords[8] = {
 
 const uint indices[6] = {0, 1, 2, 0, 2, 3};
 
+enum state_t {
+    IDLE,
+    INTERACT,
+    RENDER,
+} state = RENDER;
 
-void glfwErrorCallback(int error, const char *desc) {
+int frames_after_interact = 0;
+const int interact_frame_wait = 10;
+int lastRow = 0;
+const size_t chunkSize = 16;
+double scale = 2.0f;
+double translate_x = 0.0f;
+double translate_y = 0.0f;
+bool screen_is_dirty = false;
+double cursor_x = -1;
+double cursor_y = -1;
+
+void setRenderInteract() {
+    frames_after_interact = 0;
+    lastRow = 0;
+    state = INTERACT;
+    screen_is_dirty = true;
+}
+
+void beginRender() {
+    matrix[0] = 1.0f;
+    matrix[5] = -1.0f;
+    state = RENDER;
+    frames_after_interact = 0;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+    lastRow = 0;
+}
+
+void glfw_error_callback(int error, const char *desc) {
     cout << error << ": " << desc << endl;
     exit(1);
 }
 
-void glfwKeyCallback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
+void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
     cout << "glfw_key_callback " << key << " " << scancode << " " << action << " " << mods << endl;
     if (action == GLFW_PRESS) {
         switch (key) {
             case GLFW_KEY_ESCAPE:
                 glfwSetWindowShouldClose(wind, GL_TRUE);
+                break;
+            case GLFW_KEY_D:
+                cout << "scale=" << scale << endl;
+                cout << "translate_x=" << translate_x << endl;
+                cout << "translate_y=" << translate_y << endl;
                 break;
             default:
                 break;
@@ -87,19 +117,95 @@ void glfwKeyCallback(GLFWwindow *wind, int key, int scancode, int action, int mo
     }
 }
 
-void glfwWindowRefreshCallback(GLFWwindow *window) {
+void glfw_window_refresh_callback(GLFWwindow *window) {
     drawTriangles();
     glfwSwapBuffers(window);
 }
 
+void glfw_scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+    if (yoffset < 0.0) {
+        scale *= 1.1;
+        matrix[0] *= 0.9;
+        matrix[5] *= 0.9;
+        setRenderInteract();
+    } else if (yoffset > 0.0) {
+        scale *= 0.9;
+        matrix[0] *= 1.1;
+        matrix[5] *= 1.1;
+        setRenderInteract();
+    }
+}
+
+static void glfw_cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
+//    cout << "glfw_cursor_position_callback " << xpos << " " << ypos << endl;
+    if (cursor_x >= 0) {
+        matrix[12] = (xpos - cursor_x) / width * 2;
+        matrix[13] = -(ypos - cursor_y) / height * 2;
+        setRenderInteract();
+    }
+}
+
+void glfw_mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
+//    cout << "glfw_mouse_button_callback " << button << " " << action << " " << mods << endl;
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        glfwGetCursorPos(window, &cursor_x, &cursor_y);
+        setRenderInteract();
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        cursor_x = -1;
+        cursor_y = -1;
+        translate_x -= matrix[12] * scale;
+        translate_y -= matrix[13] * scale;
+        matrix[12] = 0;
+        matrix[13] = 0;
+
+        // copy framebuffer to the texture so dragging lines up nicely
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+
+        setRenderInteract();
+    }
+}
+
+void mainLoopStateTransition() {
+    switch (state) {
+        case IDLE:
+            break;
+        case INTERACT:
+            if (frames_after_interact > interact_frame_wait) {
+                beginRender();
+            } else {
+                frames_after_interact++;
+            }
+            break;
+        case RENDER:
+            bool more_render_needed = processTimeStep();
+            if (!more_render_needed) { state = IDLE; }
+            break;
+    }
+    if (screen_is_dirty) {
+        drawTriangles();
+        glfwSwapBuffers(window);
+        screen_is_dirty = false;
+    }
+}
+
+void mainLoop() {
+    while (!glfwWindowShouldClose(window)) {
+        using namespace std::chrono_literals;
+        glfwPollEvents();
+        mainLoopStateTransition();
+        std::this_thread::sleep_for(15ms);
+    }
+}
 
 int main(int argc, char **argv) {
     if (!glfwInit()) {
         return 255;
     }
 
-    glfwSetErrorCallback(glfwErrorCallback);
-    GLFWwindow *window = glfwCreateWindow(width, height, "Mandelbrot Set", nullptr, nullptr);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+    glfwSetErrorCallback(glfw_error_callback);
+    window = glfwCreateWindow(width, height, "Mandelbrot Set", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         exit(1);
@@ -154,21 +260,20 @@ int main(int argc, char **argv) {
         return 250;
     }
 
-    glfwSetKeyCallback(window, glfwKeyCallback);
-//    glfwSetScrollCallback(window, glfw_scroll_callback);
-//    glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
-//    glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
-//    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
-    glfwSetWindowRefreshCallback(window, glfwWindowRefreshCallback);
+    glfwSetKeyCallback(window, glfw_key_callback);
+    glfwSetScrollCallback(window, glfw_scroll_callback);
+    glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
+    glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
+    glfwSetWindowRefreshCallback(window, glfw_window_refresh_callback);
 
     glUseProgram(shader_program);
-    auto mat_loc = glGetUniformLocation(shader_program, "matrix");
+    matrix_loc = glGetUniformLocation(shader_program, "matrix");
     auto tex_loc = glGetUniformLocation(shader_program, "tex");
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(tex_loc, 0);
     glBindTexture(GL_TEXTURE_2D, texture);
     glGenerateMipmap(GL_TEXTURE_2D);
-    glUniformMatrix4fv(mat_loc, 1, GL_FALSE, matrix);
+    glUniformMatrix4fv(matrix_loc, 1, GL_FALSE, matrix);
     glBindVertexArray(vao);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -177,17 +282,8 @@ int main(int argc, char **argv) {
     drawTriangles();
     glfwSwapBuffers(window);
 
-    while (!glfwWindowShouldClose(window)) {
-        using namespace std::chrono_literals;
-        processTimeStep();
-        if (screen_is_dirty) {
-            drawTriangles();
-            glfwSwapBuffers(window);
-            screen_is_dirty = false;
-        }
-        glfwPollEvents();
-        std::this_thread::sleep_for(15ms);
-    }
+    mainLoop();
+
     glfwDestroyWindow(window);
     glfwTerminate();
     exit(0);
@@ -195,15 +291,14 @@ int main(int argc, char **argv) {
 
 void drawTriangles() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // set project matrix
+    glUniformMatrix4fv(matrix_loc, 1, GL_FALSE, matrix);
+    // now render stuff
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-void processTimeStep() {
-    cout << "render " << lastRow << endl;
-    if (!doRender) {
-        cout << "idle render" << endl;
-        return;
-    }
+bool processTimeStep() {
+//    cout << "render " << lastRow << endl;
     cl::Event ev;
     size_t dims[] = {width, height};
     glFinish();
@@ -212,7 +307,7 @@ void processTimeStep() {
     objs.clear();
     objs.push_back(opencl_texture);
     // flush opengl commands and wait for object acquisition
-    cl_int res = queue.enqueueAcquireGLObjects(&objs, NULL, &ev);
+    cl_int res = queue.enqueueAcquireGLObjects(&objs, nullptr, &ev);
     ev.wait();
     if (res != CL_SUCCESS) {
         std::cout << "Failed acquiring GL object: " << res << std::endl;
@@ -221,9 +316,9 @@ void processTimeStep() {
     cl::NDRange local(16, 16);
     if (lastRow >= local[1] * divup(dims[1], local[1])) {
         lastRow = 0;
-        doRender = false;
-        cout << "finished render" << endl;
-        return;
+        cout << "idle render" << endl;
+        screen_is_dirty = false;
+        return false;
     }
     cl::NDRange offset(0, lastRow);
     cl::NDRange global(local[0] * divup(dims[0], local[0]), chunkSize);
@@ -245,5 +340,13 @@ void processTimeStep() {
     }
     queue.finish();
     lastRow += chunkSize;
-    screen_is_dirty = true;
+    if (lastRow >= local[1] * divup(dims[1], local[1])) {
+        lastRow = 0;
+        cout << "finished render" << endl;
+        screen_is_dirty = true;
+        return false;
+    } else {
+        screen_is_dirty = true;
+        return true;
+    }
 }
