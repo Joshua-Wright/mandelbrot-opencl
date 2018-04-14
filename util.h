@@ -16,7 +16,7 @@
 
 using std::string;
 
-GLuint makeTexture(int width, int height, void *data);
+GLuint makeTexture(int width, int height, void *data = nullptr);
 
 GLuint makeBuffer(int size, const float *data, GLenum usage);
 
