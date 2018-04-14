@@ -18,6 +18,8 @@ using std::endl;
 
 void drawTriangles();
 
+void processTimeStep();
+
 GLuint vao;
 GLuint vbo;
 GLuint tbo;
@@ -31,6 +33,17 @@ int height = 1024;
 cl::Context context;
 cl::CommandQueue queue;
 cl::Kernel mandelbrot_kernel;
+cl::ImageGL opencl_texture;
+
+int lastRow = 0;
+bool doRender = true;
+const size_t chunkSize = 16;
+float scale = 2.0f;
+float translate_x = 0.0f;
+float translate_y = 0.0f;
+
+bool screen_is_dirty = false;
+
 
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -135,6 +148,12 @@ int main(int argc, char **argv) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBindVertexArray(0);
 
+    opencl_texture = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, texture, &opencl_error);
+    if (opencl_error != CL_SUCCESS) {
+        std::cout << "Failed to create OpenGL texture refrence: " << opencl_error << std::endl;
+        return 250;
+    }
+
     glfwSetKeyCallback(window, glfwKeyCallback);
 //    glfwSetScrollCallback(window, glfw_scroll_callback);
 //    glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
@@ -158,13 +177,76 @@ int main(int argc, char **argv) {
 
     while (!glfwWindowShouldClose(window)) {
         using namespace std::chrono_literals;
+        processTimeStep();
+        if (screen_is_dirty) {
+            drawTriangles();
+            glfwSwapBuffers(window);
+            screen_is_dirty = false;
+        }
         glfwPollEvents();
         std::this_thread::sleep_for(15ms);
     }
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 0;
 }
 
 void drawTriangles() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
+void processTimeStep() {
+    cout << "render " << lastRow << endl;
+    if (!doRender) {
+        cout << "idle render" << endl;
+        return;
+    }
+    cl::Event ev;
+    size_t dims[] = {width, height};
+    try {
+        glFinish();
+
+        std::vector<cl::Memory> objs;
+        objs.clear();
+        objs.push_back(opencl_texture);
+        // flush opengl commands and wait for object acquisition
+        cl_int res = queue.enqueueAcquireGLObjects(&objs, NULL, &ev);
+        ev.wait();
+        if (res != CL_SUCCESS) {
+            std::cout << "Failed acquiring GL object: " << res << std::endl;
+            exit(248);
+        }
+        cl::NDRange local(16, 16);
+        if (lastRow >= local[1] * divup(dims[1], local[1])) {
+            lastRow = 0;
+            doRender = false;
+            cout << "finished render" << endl;
+            return;
+        }
+        cl::NDRange offset(0, lastRow);
+        cl::NDRange global(local[0] * divup(dims[0], local[0]), chunkSize);
+        // set kernel arguments
+        mandelbrot_kernel.setArg(0, opencl_texture);
+        mandelbrot_kernel.setArg(1, (int) dims[0]);
+        mandelbrot_kernel.setArg(2, (int) dims[1]);
+        mandelbrot_kernel.setArg(3, scale);
+        mandelbrot_kernel.setArg(4, scale);
+        mandelbrot_kernel.setArg(5, translate_x);
+        mandelbrot_kernel.setArg(6, translate_y);
+        queue.enqueueNDRangeKernel(mandelbrot_kernel, offset, global, local);
+        // release opengl object
+        res = queue.enqueueReleaseGLObjects(&objs);
+        ev.wait();
+        if (res != CL_SUCCESS) {
+            std::cout << "Failed releasing GL object: " << res << std::endl;
+            exit(247);
+        }
+        queue.finish();
+        lastRow += chunkSize;
+        screen_is_dirty = true;
+    } catch (cl::Error err) {
+        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
+    }
 }
