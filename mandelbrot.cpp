@@ -1,21 +1,21 @@
+#include "util.h"
 #include <iostream>
+#include <thread>
+#include <chrono>
 
 #include <GL/glew.h>
-#include <GL/glut.h>
 #include <GL/gl.h>
 #include <CL/cl2.hpp>
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
-#include "util.h"
 #include "shaders.h"
 
 using std::cout;
 using std::endl;
 using cl::Context;
 
-void display();
-
-void keyboard(unsigned char key, int x, int y);
-
+void drawTriangles();
 
 GLuint vao;
 GLuint vbo;
@@ -52,33 +52,49 @@ const float texcords[8] = {
 
 const uint indices[6] = {0, 1, 2, 0, 2, 3};
 
-void keyboard(unsigned char key, int x, int y) {
-    switch (key) {
-        case 27: //escape
-            exit(0);
-            break;
-        default:
-            break;
+
+
+void glfwErrorCallback(int error, const char *desc) {
+    cout << error << ": " << desc << endl;
+    exit(1);
+}
+
+void glfwKeyCallback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
+    cout << "glfw_key_callback " << key << " " << scancode << " " << action << " " << mods << endl;
+    if (action == GLFW_PRESS) {
+        switch (key) {
+            case GLFW_KEY_ESCAPE:
+                glfwSetWindowShouldClose(wind, GL_TRUE);
+                break;
+            default:
+                break;
+        }
     }
 }
 
 
 int main(int argc, char **argv) {
-    glutInit(&argc, argv);
-    cout << "hello world" << endl;
+    if (!glfwInit()) {
+        return 255;
+    }
 
-    glutInitDisplayMode(GLUT_RGB);
-    glutInitWindowSize(width, height);
-    int win = glutCreateWindow("mandelbrot");
+    glfwSetErrorCallback(glfwErrorCallback);
+    GLFWwindow *window = glfwCreateWindow(width, height, "Mandelbrot Set", nullptr, nullptr);
+    if (!window) {
+        glfwTerminate();
+        exit(1);
+    }
+    glfwMakeContextCurrent(window);
 
     GLenum err = glewInit();
-
     if (err != GLEW_OK) {
         cout << glewGetErrorString(err);
         exit(1);
     } else if (!GLEW_VERSION_2_1) {
         exit(1);
     }
+
+    Device device = findOpenClDevice();
 
     program = makeShaderProgram(vertex_shader, fragment_shader);
     texture = makeTexture(width, height);
@@ -104,8 +120,11 @@ int main(int argc, char **argv) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBindVertexArray(0);
 
-    glutDisplayFunc(display);
-    glutKeyboardFunc(keyboard);
+    glfwSetKeyCallback(window, glfwKeyCallback);
+//    glfwSetScrollCallback(window, glfw_scroll_callback);
+//    glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
+//    glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
+//    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
 
     glUseProgram(program);
     auto mat_loc = glGetUniformLocation(program, "matrix");
@@ -118,11 +137,20 @@ int main(int argc, char **argv) {
     glBindVertexArray(vao);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    glutMainLoop();
+    drawTriangles();
+    glfwSwapBuffers(window);
+
+    while (!glfwWindowShouldClose(window)) {
+        drawTriangles();
+        glfwSwapBuffers(window);
+        using namespace std::chrono_literals;
+        glfwPollEvents();
+        std::this_thread::sleep_for(14ms);
+    }
 }
 
-void display() {
-    glClear(GL_COLOR_BUFFER_BIT);
+void drawTriangles() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glutSwapBuffers();
 }
