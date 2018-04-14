@@ -20,6 +20,22 @@ void drawTriangles();
 
 bool processTimeStep();
 
+void glfw_error_callback(int error, const char *desc);
+
+//int width = 1024;
+//int height = 1024;
+//double aspect_ratio = 1.0;
+int width = 1920;
+int height = 1080;
+double aspect_ratio = double(height) / double(width);
+
+// OpenCL state
+cl::Context context;
+cl::CommandQueue queue;
+cl::Kernel mandelbrot_kernel;
+cl::ImageGL opencl_texture;
+
+// OpenGL state
 GLuint vao;
 GLuint vbo;
 GLuint tbo;
@@ -28,14 +44,6 @@ GLuint texture;
 int matrix_loc;
 GLuint shader_program;
 GLFWwindow *window;
-
-int width = 1024;
-int height = 1024;
-
-cl::Context context;
-cl::CommandQueue queue;
-cl::Kernel mandelbrot_kernel;
-cl::ImageGL opencl_texture;
 
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -60,6 +68,7 @@ const float texcords[8] = {
 
 const uint indices[6] = {0, 1, 2, 0, 2, 3};
 
+// sate for UI state machine
 enum state_t {
     IDLE,
     INTERACT,
@@ -93,11 +102,6 @@ void beginRender() {
     glBindTexture(GL_TEXTURE_2D, texture);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
     lastRow = 0;
-}
-
-void glfw_error_callback(int error, const char *desc) {
-    cout << error << ": " << desc << endl;
-    exit(1);
 }
 
 void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
@@ -157,7 +161,7 @@ void glfw_mouse_button_callback(GLFWwindow *window, int button, int action, int 
         cursor_x = -1;
         cursor_y = -1;
         translate_x -= matrix[12] * scale;
-        translate_y -= matrix[13] * scale;
+        translate_y -= matrix[13] * scale * aspect_ratio;
         matrix[12] = 0;
         matrix[13] = 0;
 
@@ -251,7 +255,7 @@ int main(int argc, char **argv) {
     glEnableVertexAttribArray(0);
     // attach tbo
     glBindBuffer(GL_ARRAY_BUFFER, tbo);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(1);
     // attach ibo
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
@@ -330,7 +334,7 @@ bool processTimeStep() {
     mandelbrot_kernel.setArg(1, (int) dims[0]);
     mandelbrot_kernel.setArg(2, (int) dims[1]);
     mandelbrot_kernel.setArg(3, scale);
-    mandelbrot_kernel.setArg(4, scale);
+    mandelbrot_kernel.setArg(4, scale * aspect_ratio);
     mandelbrot_kernel.setArg(5, translate_x);
     mandelbrot_kernel.setArg(6, translate_y);
     queue.enqueueNDRangeKernel(mandelbrot_kernel, offset, global, local);
@@ -352,4 +356,9 @@ bool processTimeStep() {
         screen_is_dirty = true;
         return true;
     }
+}
+
+void glfw_error_callback(int error, const char *desc) {
+    cout << error << ": " << desc << endl;
+    exit(1);
 }
