@@ -23,12 +23,12 @@ bool processTimeStep();
 
 void glfw_error_callback(int error, const char *desc);
 
-//int width = 1024;
-//int height = 1024;
-//double aspect_ratio = 1.0;
-int width = 1920;
-int height = 1080;
-double aspect_ratio = double(height) / double(width);
+int width = 1024;
+int height = 1024;
+double aspect_ratio = 1.0;
+//int width = 1920;
+//int height = 1080;
+//double aspect_ratio = double(height) / double(width);
 
 // OpenCL state
 cl::Context context;
@@ -75,6 +75,7 @@ enum state_t {
     IDLE,
     INTERACT,
     RENDER,
+    PAUSE,
 } state = RENDER;
 
 int frames_after_interact = 0;
@@ -88,6 +89,8 @@ bool screen_is_dirty = false;
 double cursor_x = -1;
 double cursor_y = -1;
 bool mouse_is_clicked = false;
+
+state_t resume_to_state;
 
 void setRenderInteract() {
     frames_after_interact = 0;
@@ -104,6 +107,15 @@ void beginRender() {
     glBindTexture(GL_TEXTURE_2D, texture);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
     lastRow = 0;
+}
+
+void togglePauseState() {
+    if (state == PAUSE) {
+        state = resume_to_state;
+    } else {
+        resume_to_state = state;
+        state = PAUSE;
+    }
 }
 
 void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
@@ -152,6 +164,8 @@ void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int 
                 beginRender();
                 break;
             }
+            case GLFW_KEY_P:
+                togglePauseState();
             default:
                 break;
         }
@@ -213,6 +227,7 @@ void mainLoopStateTransition() {
     using namespace std::chrono_literals;
     switch (state) {
         case IDLE:
+        case PAUSE:
             std::this_thread::sleep_for(15ms);
             break;
         case INTERACT:
@@ -244,6 +259,12 @@ void mainLoop() {
 int main(int argc, char **argv) {
     if (!glfwInit()) {
         return 255;
+    }
+
+    if (argc == 3) {
+        width = std::atoi(argv[1]);
+        height = std::atoi(argv[1]);
+        aspect_ratio = double(height) / double(width);
     }
 
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
