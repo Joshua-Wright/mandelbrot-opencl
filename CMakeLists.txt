@@ -67,7 +67,7 @@ INCLUDE_DIRECTORIES(
 )
 
 aux_source_directory(. SRC_LIST)
-add_executable(${PROJECT_NAME} ${SRC_LIST} util.cpp util.h shaders.h)
+add_executable(${PROJECT_NAME} ${SRC_LIST} util.cpp util.h shaders.h pre_include.h)
 target_link_libraries(
         ${PROJECT_NAME}
         PRIVATE ${OPENGL_LIBRARIES}

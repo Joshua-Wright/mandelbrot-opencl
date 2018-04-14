@@ -1,4 +1,5 @@
-#include "util.h"
+#include "pre_include.h"
+
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include "util.h"
 #include "shaders.h"
 
 using std::cout;

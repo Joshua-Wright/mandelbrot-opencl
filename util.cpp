@@ -5,15 +5,21 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+
 #include "util.h"
 
 
-
 #if defined (__APPLE__) || defined(MACOSX)
-static const std::string CL_GL_SHARING_EXT = "cl_APPLE_gl_sharing";
+#define CL_GL_SHARING_EXT "cl_APPLE_gl_sharing"
 #else
-static const std::string CL_GL_SHARING_EXT = "cl_khr_gl_sharing";
+#define CL_GL_SHARING_EXT "cl_khr_gl_sharing"
 #endif
+
+#define NVIDIA_PLATFORM "NVIDIA"
+#define AMD_PLATFORM    "AMD"
+#define MESA_PLATFORM   "Clover"
+#define INTEL_PLATFORM  "Intel"
+#define APPLE_PLATFORM  "Apple"
 
 GLuint makeTexture(int width, int height, void *data) {
     GLuint ret = 0;
@@ -76,17 +82,17 @@ bool checkExtnAvailability(const Device &pDevice) {
         std::stringstream ss(exts);
         std::string item;
         int found = -1;
-        while (std::getline(ss,item,' ')) {
-            if (item==CL_GL_SHARING_EXT) {
-                found=1;
+        while (std::getline(ss, item, ' ')) {
+            if (item == CL_GL_SHARING_EXT) {
+                found = 1;
                 break;
             }
         }
-        if (found==1) {
-            std::cout<<"Found CL_GL_SHARING extension: "<<item<<std::endl;
+        if (found == 1) {
+            std::cout << "Found CL_GL_SHARING extension: " << item << std::endl;
             ret_val = true;
         } else {
-            std::cout<<"CL_GL_SHARING extension not found\n";
+            std::cout << "CL_GL_SHARING extension not found\n";
             ret_val = false;
         }
     } catch (Error err) {
@@ -95,15 +101,7 @@ bool checkExtnAvailability(const Device &pDevice) {
     return ret_val;
 }
 
-
-static const std::string NVIDIA_PLATFORM = "NVIDIA";
-static const std::string AMD_PLATFORM = "AMD";
-static const std::string MESA_PLATFORM = "Clover";
-static const std::string INTEL_PLATFORM = "Intel";
-static const std::string APPLE_PLATFORM = "Apple";
-
-cl::Platform getPlatform(std::string pName, cl_int &error)
-{
+cl::Platform getPlatform(const std::string &pName, cl_int &error) {
     using cl::Platform;
     using cl::Error;
     using PlatformIter = std::vector<Platform>::iterator;
@@ -115,44 +113,44 @@ cl::Platform getPlatform(std::string pName, cl_int &error)
         std::vector<Platform> platforms;
         Platform::get(&platforms);
         int found = -1;
-        for(PlatformIter it=platforms.begin(); it<platforms.end(); ++it) {
+        for (PlatformIter it = platforms.begin(); it < platforms.end(); ++it) {
             std::string temp = it->getInfo<CL_PLATFORM_NAME>();
-            if (temp.find(pName)!=std::string::npos) {
+            if (temp.find(pName) != std::string::npos) {
                 found = it - platforms.begin();
-                std::cout<<"Found platform: "<<temp<<std::endl;
+                std::cout << "Found platform: " << temp << std::endl;
                 break;
             }
         }
-        if (found==-1) {
+        if (found == -1) {
             // Going towards + numbers to avoid conflict with OpenCl error codes
             error = +1; // requested platform not found
         } else {
             ret_val = platforms[found];
         }
-    } catch(Error err) {
+    } catch (Error err) {
         std::cout << err.what() << "(" << err.err() << ")" << std::endl;
         error = err.err();
     }
     return ret_val;
 }
 
-
-#define FIND_PLATFORM(name)             \
-    plat = getPlatform(name, errCode);  \
-    if (errCode == CL_SUCCESS)          \
-        return plat;
-
-cl::Platform getPlatform()
-{
+cl::Platform getPlatform() {
     cl_int errCode;
     cl::Platform plat;
 
-    FIND_PLATFORM(NVIDIA_PLATFORM)
-    FIND_PLATFORM(AMD_PLATFORM)
-    FIND_PLATFORM(INTEL_PLATFORM)
-    FIND_PLATFORM(APPLE_PLATFORM)
-    FIND_PLATFORM(MESA_PLATFORM)
+    auto platformNames = {
+            NVIDIA_PLATFORM,
+            AMD_PLATFORM,
+            INTEL_PLATFORM,
+            APPLE_PLATFORM,
+            MESA_PLATFORM,
+    };
 
+    for (auto &name: platformNames) {
+        plat = getPlatform(name, errCode);
+        if (errCode == CL_SUCCESS)
+            return plat;
+    }
     // If no platforms are found
     exit(252);
 }
@@ -163,14 +161,14 @@ Device findOpenClDevice() {
     Platform lPlatform = getPlatform();
 
     cl_context_properties cps[] = {
-            CL_CONTEXT_PLATFORM, (cl_context_properties)lPlatform(),
+            CL_CONTEXT_PLATFORM, (cl_context_properties) lPlatform(),
             0};
     std::vector<Device> devices;
     lPlatform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
     // Get a list of devices on this platform
-    for (unsigned d = 0; d < devices.size(); ++d) {
-        if (checkExtnAvailability(devices[d])) {
-            return devices[d];
+    for (const auto &device : devices) {
+        if (checkExtnAvailability(device)) {
+            return device;
         }
     }
     std::cout << "you need a GPU" << std::endl;

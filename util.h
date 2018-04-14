@@ -1,23 +1,12 @@
 //
 // Created by j0sh on 4/13/18.
 //
+#pragma once
 
-#ifndef MANDELBROT_OPENCL_UTIL_H
-#define MANDELBROT_OPENCL_UTIL_H
-
-#ifdef OS_WIN
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define GLFW_EXPOSE_NATIVE_WGL
-#endif
-
-#ifdef OS_LNX
-#define GLFW_EXPOSE_NATIVE_X11
-#define GLFW_EXPOSE_NATIVE_GLX
-#endif
-
-#define CL_HPP_ENABLE_EXCEPTIONS
+#include "pre_include.h"
 
 #include <string>
+
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <CL/cl.h>
@@ -33,5 +22,3 @@ GLuint makeBuffer(int size, const float *data, GLenum usage);
 GLuint makeShaderProgram(const std::string &vertex_shader, const std::string &fragment_shader);
 
 Device findOpenClDevice();
-
-#endif //MANDELBROT_OPENCL_UTIL_H
