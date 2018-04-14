@@ -53,7 +53,6 @@ const float texcords[8] = {
 const uint indices[6] = {0, 1, 2, 0, 2, 3};
 
 
-
 void glfwErrorCallback(int error, const char *desc) {
     cout << error << ": " << desc << endl;
     exit(1);
@@ -70,6 +69,11 @@ void glfwKeyCallback(GLFWwindow *wind, int key, int scancode, int action, int mo
                 break;
         }
     }
+}
+
+void glfwWindowRefreshCallback(GLFWwindow *window) {
+    drawTriangles();
+    glfwSwapBuffers(window);
 }
 
 
@@ -125,6 +129,7 @@ int main(int argc, char **argv) {
 //    glfwSetCursorPosCallback(window, glfw_cursor_position_callback);
 //    glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
 //    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
+    glfwSetWindowRefreshCallback(window, glfwWindowRefreshCallback);
 
     glUseProgram(program);
     auto mat_loc = glGetUniformLocation(program, "matrix");
@@ -141,11 +146,9 @@ int main(int argc, char **argv) {
     glfwSwapBuffers(window);
 
     while (!glfwWindowShouldClose(window)) {
-        drawTriangles();
-        glfwSwapBuffers(window);
         using namespace std::chrono_literals;
         glfwPollEvents();
-        std::this_thread::sleep_for(14ms);
+        std::this_thread::sleep_for(15ms);
     }
 }
 
