@@ -76,6 +76,7 @@ double translate_y = 0.0f;
 bool screen_is_dirty = false;
 double cursor_x = -1;
 double cursor_y = -1;
+bool mouse_is_clicked = false;
 
 void setRenderInteract() {
     frames_after_interact = 0;
@@ -138,7 +139,7 @@ void glfw_scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
 
 static void glfw_cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
 //    cout << "glfw_cursor_position_callback " << xpos << " " << ypos << endl;
-    if (cursor_x >= 0) {
+    if (mouse_is_clicked) {
         matrix[12] = (xpos - cursor_x) / width * 2;
         matrix[13] = -(ypos - cursor_y) / height * 2;
         setRenderInteract();
@@ -148,9 +149,11 @@ static void glfw_cursor_position_callback(GLFWwindow *window, double xpos, doubl
 void glfw_mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
 //    cout << "glfw_mouse_button_callback " << button << " " << action << " " << mods << endl;
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        mouse_is_clicked = true;
         glfwGetCursorPos(window, &cursor_x, &cursor_y);
         setRenderInteract();
     } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        mouse_is_clicked = false;
         cursor_x = -1;
         cursor_y = -1;
         translate_x -= matrix[12] * scale;
@@ -167,11 +170,13 @@ void glfw_mouse_button_callback(GLFWwindow *window, int button, int action, int 
 }
 
 void mainLoopStateTransition() {
+    using namespace std::chrono_literals;
     switch (state) {
         case IDLE:
+            std::this_thread::sleep_for(15ms);
             break;
         case INTERACT:
-            if (frames_after_interact > interact_frame_wait) {
+            if (frames_after_interact > interact_frame_wait && !mouse_is_clicked) {
                 beginRender();
             } else {
                 frames_after_interact++;
@@ -191,10 +196,8 @@ void mainLoopStateTransition() {
 
 void mainLoop() {
     while (!glfwWindowShouldClose(window)) {
-        using namespace std::chrono_literals;
         glfwPollEvents();
         mainLoopStateTransition();
-        std::this_thread::sleep_for(15ms);
     }
 }
 
