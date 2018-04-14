@@ -45,10 +45,10 @@ void fractal(write_only image2d_t out, int dim0, int dim1,
 
     npos = npos * scale + translate;
 
+    double pixel_width = scalex/dim0;
+
     if (gx<dim0 && gy<dim1) {
-        //int iteration   = mandelbrot(npos);
-        //int colorIndex  = iteration%NUM_COLORS;
-        float4 color = mandelbrot(npos);
+        float4 color = mandelbrot(npos, pixel_width);
         write_imagef(out, (int2)(gx,gy), color);
     }
 }
@@ -71,7 +71,7 @@ inline double2 csqr(double2 a) {
     return (double2)( a.x*a.x - a.y*a.y, a.x*a.y*2);
 }
 
-float4 mandelbrot(double2 coords)
+float4 mandelbrot(double2 coords, double pixel_width)
 {
     double2 z = (double2)(0, 0);
     double2 dz = (double2)(0, 0);
@@ -367,4 +367,3 @@ constant float4 colormap[NUM_COLORS] = {
 	(float4)(9.88362068e-01, 9.98364143e-01, 6.44924005e-01, 1.0000),
 };
 )'''";
-

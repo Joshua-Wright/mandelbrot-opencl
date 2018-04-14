@@ -23,12 +23,12 @@ bool processTimeStep();
 
 void glfw_error_callback(int error, const char *desc);
 
-int width = 1024;
-int height = 1024;
-double aspect_ratio = 1.0;
-//int width = 1920;
-//int height = 1080;
-//double aspect_ratio = double(height) / double(width);
+//int width = 1024;
+//int height = 1024;
+//double aspect_ratio = 1.0;
+int width = 1920;
+int height = 1080;
+double aspect_ratio = double(height) / double(width);
 
 // OpenCL state
 cl::Context context;
