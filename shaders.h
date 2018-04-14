@@ -2,8 +2,7 @@
 // Created by j0sh on 4/13/18.
 //
 
-#ifndef MANDELBROT_OPENCL_SHADERS_H
-#define MANDELBROT_OPENCL_SHADERS_H
+#pragma once
 
 #include <string>
 
@@ -29,7 +28,85 @@ void main() {
 }
 )'''";
 
+std::string fractal_kernel = R"'''(
+kernel
+void fractal(write_only image2d_t out, int dim0, int dim1,
+             double scalex, double scaley, double translatex, double translatey)
+{
+    const int gx = get_global_id(0);
+    const int gy = get_global_id(1);
+
+    double h0 = dim0/2.0f;
+    double h1 = dim1/2.0f;
+
+    double2 scale     = (double2)(scalex, scaley);
+    double2 translate = (double2)(translatex, translatey);
+    double2 npos      = (double2)((gx-h0)/h0, (gy-h1)/h1);
+
+    npos = npos * scale + translate;
+
+    if (gx<dim0 && gy<dim1) {
+        //int iteration   = mandelbrot(npos);
+        //int colorIndex  = iteration%NUM_COLORS;
+        float4 color = mandelbrot(npos);
+        write_imagef(out, (int2)(gx,gy), color);
+    }
+}
+)'''";
+
 std::string mandelbrot_cl = R"'''(
+constant unsigned MAX_ITERS = 2048;
+
+#define LOG_2 0.693147180559945309417232121458176568075500134360255254120
+#define PI2 6.283185307179586476925286766559005768394338798750211641949
+#define threshold2 100
+#define log_maxVal 30
+#define wrap 8
+
+inline double2 cmult(double2 a, double2 b) {
+    return (double2)( a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
+}
+
+inline double2 csqr(double2 a) {
+    return (double2)( a.x*a.x - a.y*a.y, a.x*a.y*2);
+}
+
+float4 mandelbrot(double2 coords)
+{
+    double2 z = (double2)(0, 0);
+    double2 dz = (double2)(0, 0);
+    double2 c = coords;
+
+    double val = 0.0;
+    unsigned i;
+    for (i = 0; i < MAX_ITERS; i++) {
+        dz = 2.0f * cmult(z,dz) + 1.0f;
+        z = csqr(z) + c;
+        if (dot(z,z) > threshold2) {
+            double log_zn = log(z.x*z.x+z.y*z.y) / 2.0f;
+            double nu = log(log_zn/LOG_2) / LOG_2;
+            val = i + 1 - nu;
+            break;
+        }
+    }
+    if (i == MAX_ITERS) {
+        return (float4)(0,0,0,1);
+    }
+
+    double zmag2 = z.x*z.x + z.y*z.y;
+    double zmag = sqrt(zmag2);
+    double dzmag = sqrt(dz.x*dz.x + dz.y*dz.y);
+    double dist_est = log(zmag2) * zmag / dzmag;
+
+    val = log(val) / log_maxVal * wrap;
+    val = sin(val * PI2)*0.5f + 0.5f;
+    int vali = val*NUM_COLORS;
+
+    return colormap[vali];
+}
+)'''";
+
+std::string inferno_colormap = R"'''(
 #define NUM_COLORS 256
 constant float4 colormap[NUM_COLORS] = {
 	(float4)(1.46159096e-03, 4.66127766e-04, 1.38655200e-02, 1.0000),
@@ -289,82 +366,5 @@ constant float4 colormap[NUM_COLORS] = {
 	(float4)(9.82257307e-01, 9.94108844e-01, 6.31017009e-01, 1.0000),
 	(float4)(9.88362068e-01, 9.98364143e-01, 6.44924005e-01, 1.0000),
 };
-
-constant unsigned MAX_ITERS = 2048;
-
-#define LOG_2 0.693147180559945309417232121458176568075500134360255254120
-#define PI2 6.283185307179586476925286766559005768394338798750211641949
-#define threshold2 100
-#define log_maxVal 30
-#define wrap 8
-
-inline double2 cmult(double2 a, double2 b) {
-    return (double2)( a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
-}
-
-inline double2 csqr(double2 a) {
-    return (double2)( a.x*a.x - a.y*a.y, a.x*a.y*2);
-}
-
-float4 mandelbrot(double2 coords)
-{
-    double2 z = (double2)(0, 0);
-    double2 dz = (double2)(0, 0);
-    double2 c = coords;
-
-    double val = 0.0;
-    unsigned i;
-    for (i = 0; i < MAX_ITERS; i++) {
-        dz = 2.0f * cmult(z,dz) + 1.0f;
-        z = csqr(z) + c;
-        if (dot(z,z) > threshold2) {
-            double log_zn = log(z.x*z.x+z.y*z.y) / 2.0f;
-            double nu = log(log_zn/LOG_2) / LOG_2;
-            val = i + 1 - nu;
-            break;
-        }
-    }
-    if (i == MAX_ITERS) {
-        return (float4)(0,0,0,1);
-    }
-
-    double zmag2 = z.x*z.x + z.y*z.y;
-    double zmag = sqrt(zmag2);
-    double dzmag = sqrt(dz.x*dz.x + dz.y*dz.y);
-    double dist_est = log(zmag2) * zmag / dzmag;
-
-    val = log(val) / log_maxVal * wrap;
-    val = sin(val * PI2)*0.5f + 0.5f;
-    int vali = val*NUM_COLORS;
-
-    return colormap[vali];
-}
-
-kernel
-void fractal(write_only image2d_t out, int dim0, int dim1,
-             double scalex, double scaley, double translatex, double translatey)
-{
-    const int gx = get_global_id(0);
-    const int gy = get_global_id(1);
-
-    double h0 = dim0/2.0f;
-    double h1 = dim1/2.0f;
-
-    double2 scale     = (double2)(scalex, scaley);
-    double2 translate = (double2)(translatex, translatey);
-    double2 npos      = (double2)((gx-h0)/h0, (gy-h1)/h1);
-
-    npos = npos * scale + translate;
-
-    if (gx<dim0 && gy<dim1) {
-        //int iteration   = mandelbrot(npos);
-        //int colorIndex  = iteration%NUM_COLORS;
-        float4 color = mandelbrot(npos);
-        write_imagef(out, (int2)(gx,gy), color);
-    }
-}
-
 )'''";
 
-
-#endif //MANDELBROT_OPENCL_SHADERS_H

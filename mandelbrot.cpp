@@ -9,6 +9,7 @@
 #include <CL/cl2.hpp>
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+#include <fstream>
 
 #include "util.h"
 #include "shaders.h"
@@ -22,16 +23,17 @@ bool processTimeStep();
 
 void glfw_error_callback(int error, const char *desc);
 
-//int width = 1024;
-//int height = 1024;
-//double aspect_ratio = 1.0;
-int width = 1920;
-int height = 1080;
-double aspect_ratio = double(height) / double(width);
+int width = 1024;
+int height = 1024;
+double aspect_ratio = 1.0;
+//int width = 1920;
+//int height = 1080;
+//double aspect_ratio = double(height) / double(width);
 
 // OpenCL state
 cl::Context context;
 cl::CommandQueue queue;
+cl::Device device;
 cl::Kernel mandelbrot_kernel;
 cl::ImageGL opencl_texture;
 
@@ -105,7 +107,7 @@ void beginRender() {
 }
 
 void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int mods) {
-    cout << "glfw_key_callback " << key << " " << scancode << " " << action << " " << mods << endl;
+//    cout << "glfw_key_callback " << key << " " << scancode << " " << action << " " << mods << endl;
     if (action == GLFW_PRESS) {
         switch (key) {
             case GLFW_KEY_ESCAPE:
@@ -116,6 +118,40 @@ void glfw_key_callback(GLFWwindow *wind, int key, int scancode, int action, int 
                 cout << "translate_x=" << translate_x << endl;
                 cout << "translate_y=" << translate_y << endl;
                 break;
+            case GLFW_KEY_R: {
+                cout << "reloading kernel" << endl;
+                cl_int opencl_error;
+                std::ifstream sourceFile("mandelbrot.cl");
+                if (!sourceFile.is_open()) {
+                    cout << "failed to open source file mandelbrot.cl" << endl;
+                    return;
+                }
+                std::string sourceCode(
+                        std::istreambuf_iterator<char>(sourceFile),
+                        (std::istreambuf_iterator<char>()));
+                auto kernel_source = inferno_colormap + sourceCode + fractal_kernel;
+                auto opencl_program = makeOpenClProgram(context, kernel_source, opencl_error);
+                if (opencl_error != CL_SUCCESS) {
+                    cout << "failed to make kernel" << endl;
+                    return;
+                }
+                opencl_error = opencl_program.build({device});
+                if (opencl_error != CL_SUCCESS) {
+                    cout << "failed to build kernel" << endl;
+                    std::string log = opencl_program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+                    cout << log << endl;
+                    return;
+                }
+                auto new_mandelbrot_kernel = cl::Kernel(opencl_program, "fractal", &opencl_error);
+                if (opencl_error != CL_SUCCESS) {
+                    cout << "failed to set kernel" << endl;
+                    return;
+                }
+                mandelbrot_kernel = new_mandelbrot_kernel;
+                cout << "kernel reloaded successfully" << endl;
+                beginRender();
+                break;
+            }
             default:
                 break;
         }
@@ -228,14 +264,18 @@ int main(int argc, char **argv) {
     }
 
     auto platform = findOpenClPlatform();
-    auto device = findOpenClDevice(platform, window);
+    device = findOpenClDevice(platform, window);
     context = makeOpenCLContext(platform, device, window);
     cl_int opencl_error;
-    auto opencl_program = makeOpenClProgram(context, mandelbrot_cl, opencl_error);
-    queue = cl::CommandQueue(context, device);
-    opencl_program.build({device});
-    mandelbrot_kernel = cl::Kernel(opencl_program, "fractal");
-
+    queue = cl::CommandQueue(context, device, 0, &opencl_error);
+    if (opencl_error != CL_SUCCESS) { return 201; }
+    auto kernel_source = inferno_colormap + mandelbrot_cl + fractal_kernel;
+    auto opencl_program = makeOpenClProgram(context, kernel_source, opencl_error);
+    if (opencl_error != CL_SUCCESS) { return 202; }
+    opencl_error = opencl_program.build({device});
+    if (opencl_error != CL_SUCCESS) { return 203; }
+    mandelbrot_kernel = cl::Kernel(opencl_program, "fractal", &opencl_error);
+    if (opencl_error != CL_SUCCESS) { return 204; }
 
     shader_program = makeShaderProgram(vertex_shader, fragment_shader);
     texture = makeTexture(width, height);
