@@ -76,3 +76,11 @@ target_link_libraries(
         PRIVATE ${OpenCL_LIBRARIES}
         PRIVATE ${X11_LIBS}
 )
+
+# disable C++ exceptions
+target_compile_definitions(${PROJECT_NAME} PUBLIC LIBASYNC_NO_EXCEPTIONS)
+if (MSVC)
+    target_compile_options(${PROJECT_NAME} PUBLIC /EHs-c-)
+else()
+    target_compile_options(${PROJECT_NAME} PUBLIC -fno-exceptions)
+endif()

@@ -85,62 +85,51 @@ GLuint makeShaderProgram(const std::string &vertex_shader, const std::string &fr
 }
 
 bool checkClGlSharingExtensionAvailability(const cl::Device &pDevice) {
-    using cl::Error;
-    bool ret_val = true;
-    try {
-        // find extensions required
-        std::string exts = pDevice.getInfo<CL_DEVICE_EXTENSIONS>();
-        std::stringstream ss(exts);
-        std::string item;
-        int found = -1;
-        while (std::getline(ss, item, ' ')) {
-            if (item == CL_GL_SHARING_EXT) {
-                found = 1;
-                break;
-            }
+    bool ret = true;
+    // find extensions required
+    std::string exts = pDevice.getInfo<CL_DEVICE_EXTENSIONS>();
+    std::stringstream ss(exts);
+    std::string item;
+    int found = -1;
+    while (std::getline(ss, item, ' ')) {
+        if (item == CL_GL_SHARING_EXT) {
+            found = 1;
+            break;
         }
-        if (found == 1) {
-            std::cout << "Found CL_GL_SHARING extension: " << item << std::endl;
-            ret_val = true;
-        } else {
-            std::cout << "CL_GL_SHARING extension not found\n";
-            ret_val = false;
-        }
-    } catch (Error &err) {
-        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
     }
-    return ret_val;
+    if (found == 1) {
+        std::cout << "Found CL_GL_SHARING extension: " << item << std::endl;
+        ret = true;
+    } else {
+        std::cout << "CL_GL_SHARING extension not found\n";
+        ret = false;
+    }
+    return ret;
 }
 
 cl::Platform getPlatform(const std::string &pName, cl_int &error) {
     using cl::Platform;
-    using cl::Error;
     using PlatformIter = std::vector<Platform>::iterator;
 
     Platform ret_val;
     error = 0;
-    try {
-        // Get available platforms
-        std::vector<Platform> platforms;
-        Platform::get(&platforms);
-        int found = -1;
-        for (PlatformIter it = platforms.begin(); it < platforms.end(); ++it) {
-            std::string temp = it->getInfo<CL_PLATFORM_NAME>();
-            if (temp.find(pName) != std::string::npos) {
-                found = it - platforms.begin();
-                std::cout << "Found platform: " << temp << std::endl;
-                break;
-            }
+    // Get available platforms
+    std::vector<Platform> platforms;
+    Platform::get(&platforms);
+    int found = -1;
+    for (PlatformIter it = platforms.begin(); it < platforms.end(); ++it) {
+        std::string temp = it->getInfo<CL_PLATFORM_NAME>();
+        if (temp.find(pName) != std::string::npos) {
+            found = it - platforms.begin();
+            std::cout << "Found platform: " << temp << std::endl;
+            break;
         }
-        if (found == -1) {
-            // Going towards + numbers to avoid conflict with OpenCl error codes
-            error = +1; // requested platform not found
-        } else {
-            ret_val = platforms[found];
-        }
-    } catch (Error &err) {
-        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
-        error = err.err();
+    }
+    if (found == -1) {
+        // Going towards + numbers to avoid conflict with OpenCl error codes
+        error = +1; // requested platform not found
+    } else {
+        ret_val = platforms[found];
     }
     return ret_val;
 }
@@ -168,7 +157,7 @@ cl::Platform findOpenClPlatform() {
 }
 
 
-cl::Device findOpenClDevice(const cl::Platform &platform,GLFWwindow *window) {
+cl::Device findOpenClDevice(const cl::Platform &platform, GLFWwindow *window) {
 
     std::vector<cl::Device> devices;
     platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
@@ -185,14 +174,9 @@ cl::Device findOpenClDevice(const cl::Platform &platform,GLFWwindow *window) {
 cl::Program makeOpenClProgram(const cl::Context &pContext, const std::string &sourceCode, cl_int &error) {
     cl::Program program;
     error = 0;
-    try {
-        cl::Program::Sources source(1, sourceCode);
-        // Make program of the source code in the context
-        program = cl::Program(pContext, source);
-    } catch (cl::Error &err) {
-        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
-        error = err.err();
-    }
+    cl::Program::Sources source(1, sourceCode);
+    // Make program of the source code in the context
+    program = cl::Program(pContext, source);
     return program;
 }
 
@@ -211,5 +195,5 @@ cl::Context makeOpenCLContext(const cl::Platform &platform, cl::Device &device, 
             CL_CONTEXT_PLATFORM, (cl_context_properties)lPlatform(),
             0};
 #endif
-    return cl::Context (device, cps);
+    return cl::Context(device, cps);
 }

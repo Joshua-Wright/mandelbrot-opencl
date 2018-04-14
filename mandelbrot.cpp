@@ -170,6 +170,8 @@ int main(int argc, char **argv) {
     glGenerateMipmap(GL_TEXTURE_2D);
     glUniformMatrix4fv(mat_loc, 1, GL_FALSE, matrix);
     glBindVertexArray(vao);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
     drawTriangles();
@@ -188,12 +190,11 @@ int main(int argc, char **argv) {
     }
     glfwDestroyWindow(window);
     glfwTerminate();
-    return 0;
+    exit(0);
 }
 
 void drawTriangles() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
@@ -205,48 +206,44 @@ void processTimeStep() {
     }
     cl::Event ev;
     size_t dims[] = {width, height};
-    try {
-        glFinish();
+    glFinish();
 
-        std::vector<cl::Memory> objs;
-        objs.clear();
-        objs.push_back(opencl_texture);
-        // flush opengl commands and wait for object acquisition
-        cl_int res = queue.enqueueAcquireGLObjects(&objs, NULL, &ev);
-        ev.wait();
-        if (res != CL_SUCCESS) {
-            std::cout << "Failed acquiring GL object: " << res << std::endl;
-            exit(248);
-        }
-        cl::NDRange local(16, 16);
-        if (lastRow >= local[1] * divup(dims[1], local[1])) {
-            lastRow = 0;
-            doRender = false;
-            cout << "finished render" << endl;
-            return;
-        }
-        cl::NDRange offset(0, lastRow);
-        cl::NDRange global(local[0] * divup(dims[0], local[0]), chunkSize);
-        // set kernel arguments
-        mandelbrot_kernel.setArg(0, opencl_texture);
-        mandelbrot_kernel.setArg(1, (int) dims[0]);
-        mandelbrot_kernel.setArg(2, (int) dims[1]);
-        mandelbrot_kernel.setArg(3, scale);
-        mandelbrot_kernel.setArg(4, scale);
-        mandelbrot_kernel.setArg(5, translate_x);
-        mandelbrot_kernel.setArg(6, translate_y);
-        queue.enqueueNDRangeKernel(mandelbrot_kernel, offset, global, local);
-        // release opengl object
-        res = queue.enqueueReleaseGLObjects(&objs);
-        ev.wait();
-        if (res != CL_SUCCESS) {
-            std::cout << "Failed releasing GL object: " << res << std::endl;
-            exit(247);
-        }
-        queue.finish();
-        lastRow += chunkSize;
-        screen_is_dirty = true;
-    } catch (cl::Error err) {
-        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
+    std::vector<cl::Memory> objs;
+    objs.clear();
+    objs.push_back(opencl_texture);
+    // flush opengl commands and wait for object acquisition
+    cl_int res = queue.enqueueAcquireGLObjects(&objs, NULL, &ev);
+    ev.wait();
+    if (res != CL_SUCCESS) {
+        std::cout << "Failed acquiring GL object: " << res << std::endl;
+        exit(248);
     }
+    cl::NDRange local(16, 16);
+    if (lastRow >= local[1] * divup(dims[1], local[1])) {
+        lastRow = 0;
+        doRender = false;
+        cout << "finished render" << endl;
+        return;
+    }
+    cl::NDRange offset(0, lastRow);
+    cl::NDRange global(local[0] * divup(dims[0], local[0]), chunkSize);
+    // set kernel arguments
+    mandelbrot_kernel.setArg(0, opencl_texture);
+    mandelbrot_kernel.setArg(1, (int) dims[0]);
+    mandelbrot_kernel.setArg(2, (int) dims[1]);
+    mandelbrot_kernel.setArg(3, scale);
+    mandelbrot_kernel.setArg(4, scale);
+    mandelbrot_kernel.setArg(5, translate_x);
+    mandelbrot_kernel.setArg(6, translate_y);
+    queue.enqueueNDRangeKernel(mandelbrot_kernel, offset, global, local);
+    // release opengl object
+    res = queue.enqueueReleaseGLObjects(&objs);
+    ev.wait();
+    if (res != CL_SUCCESS) {
+        std::cout << "Failed releasing GL object: " << res << std::endl;
+        exit(247);
+    }
+    queue.finish();
+    lastRow += chunkSize;
+    screen_is_dirty = true;
 }
