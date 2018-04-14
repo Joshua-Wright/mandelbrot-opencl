@@ -2,12 +2,20 @@
 // Created by j0sh on 4/13/18.
 //
 
+#include "pre_include.h"
+
 #include <iostream>
 #include <sstream>
 #include <string>
 
-#include "util.h"
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <CL/cl.h>
+#include <CL/cl2.hpp>
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
+#include "util.h"
 
 #if defined (__APPLE__) || defined(MACOSX)
 #define CL_GL_SHARING_EXT "cl_APPLE_gl_sharing"
@@ -20,6 +28,10 @@
 #define MESA_PLATFORM   "Clover"
 #define INTEL_PLATFORM  "Intel"
 #define APPLE_PLATFORM  "Apple"
+
+using std::cout;
+using std::endl;
+
 
 GLuint makeTexture(int width, int height, void *data) {
     GLuint ret = 0;
@@ -73,7 +85,7 @@ GLuint makeShaderProgram(const std::string &vertex_shader, const std::string &fr
     return program;
 }
 
-bool checkExtnAvailability(const Device &pDevice) {
+bool checkClGlSharingExtensionAvailability(const cl::Device &pDevice) {
     using cl::Error;
     bool ret_val = true;
     try {
@@ -95,7 +107,7 @@ bool checkExtnAvailability(const Device &pDevice) {
             std::cout << "CL_GL_SHARING extension not found\n";
             ret_val = false;
         }
-    } catch (Error err) {
+    } catch (Error &err) {
         std::cout << err.what() << "(" << err.err() << ")" << std::endl;
     }
     return ret_val;
@@ -127,14 +139,14 @@ cl::Platform getPlatform(const std::string &pName, cl_int &error) {
         } else {
             ret_val = platforms[found];
         }
-    } catch (Error err) {
+    } catch (Error &err) {
         std::cout << err.what() << "(" << err.err() << ")" << std::endl;
         error = err.err();
     }
     return ret_val;
 }
 
-cl::Platform getPlatform() {
+cl::Platform findOpenClPlatform() {
     cl_int errCode;
     cl::Platform plat;
 
@@ -152,25 +164,53 @@ cl::Platform getPlatform() {
             return plat;
     }
     // If no platforms are found
+    cout << "no supported platform found" << endl;
     exit(252);
 }
 
 
-Device findOpenClDevice() {
-    using cl::Platform;
-    Platform lPlatform = getPlatform();
+cl::Device findOpenClDevice(const cl::Platform &platform,GLFWwindow *window) {
 
-    cl_context_properties cps[] = {
-            CL_CONTEXT_PLATFORM, (cl_context_properties) lPlatform(),
-            0};
-    std::vector<Device> devices;
-    lPlatform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+    std::vector<cl::Device> devices;
+    platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
     // Get a list of devices on this platform
     for (const auto &device : devices) {
-        if (checkExtnAvailability(device)) {
+        if (checkClGlSharingExtensionAvailability(device)) {
             return device;
         }
     }
     std::cout << "you need a GPU" << std::endl;
     exit(1);
+}
+
+cl::Program makeOpenClProgram(const cl::Context &pContext, const std::string &sourceCode, cl_int &error) {
+    cl::Program program;
+    error = 0;
+    try {
+        cl::Program::Sources source(1, sourceCode);
+        // Make program of the source code in the context
+        program = cl::Program(pContext, source);
+    } catch (cl::Error &err) {
+        std::cout << err.what() << "(" << err.err() << ")" << std::endl;
+        error = err.err();
+    }
+    return program;
+}
+
+cl::Context makeOpenCLContext(const cl::Platform &platform, cl::Device &device, GLFWwindow *window) {
+#ifdef OS_LNX
+    cl_context_properties cps[] = {
+            CL_GL_CONTEXT_KHR, (cl_context_properties) glfwGetGLXContext(window),
+            CL_GLX_DISPLAY_KHR, (cl_context_properties) glfwGetX11Display(),
+            CL_CONTEXT_PLATFORM, (cl_context_properties) platform(),
+            0};
+#endif
+#ifdef OS_WIN
+    cl_context_properties cps[] = {
+            CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetWGLContext(window),
+            CL_WGL_HDC_KHR, (cl_context_properties)GetDC(glfwGetWin32Window(window)),
+            CL_CONTEXT_PLATFORM, (cl_context_properties)lPlatform(),
+            0};
+#endif
+    return cl::Context (device, cps);
 }

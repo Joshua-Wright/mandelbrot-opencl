@@ -15,7 +15,6 @@
 
 using std::cout;
 using std::endl;
-using cl::Context;
 
 void drawTriangles();
 
@@ -24,12 +23,12 @@ GLuint vbo;
 GLuint tbo;
 GLuint ibo;
 GLuint texture;
-GLuint program;
+GLuint shader_program;
 
 int width = 1024;
 int height = 1024;
 
-Context context;
+cl::Context context;
 
 float matrix[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -100,9 +99,13 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    Device device = findOpenClDevice();
+    auto platform = findOpenClPlatform();
+    auto device = findOpenClDevice(platform, window);
+    context = makeOpenCLContext(platform, device, window);
+    cl_int opencl_error;
+    auto opencl_program = makeOpenClProgram(context, mandelbrot_cl, opencl_error);
 
-    program = makeShaderProgram(vertex_shader, fragment_shader);
+    shader_program = makeShaderProgram(vertex_shader, fragment_shader);
     texture = makeTexture(width, height);
     GLuint vbo = makeBuffer(12, vertices, GL_STATIC_DRAW);
     GLuint tbo = makeBuffer(8, texcords, GL_STATIC_DRAW);
@@ -133,9 +136,9 @@ int main(int argc, char **argv) {
 //    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_size_callback);
     glfwSetWindowRefreshCallback(window, glfwWindowRefreshCallback);
 
-    glUseProgram(program);
-    auto mat_loc = glGetUniformLocation(program, "matrix");
-    auto tex_loc = glGetUniformLocation(program, "tex");
+    glUseProgram(shader_program);
+    auto mat_loc = glGetUniformLocation(shader_program, "matrix");
+    auto tex_loc = glGetUniformLocation(shader_program, "tex");
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(tex_loc, 0);
     glBindTexture(GL_TEXTURE_2D, texture);

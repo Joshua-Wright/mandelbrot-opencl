@@ -17,7 +17,7 @@ IF (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 ENDIF ()
 
 IF (UNIX)
-    ADD_DEFINITIONS(-Wall -std=c++11 -fvisibility=hidden)
+    ADD_DEFINITIONS(-Wall -fvisibility=hidden)
 ENDIF ()
 
 # OS Definitions
